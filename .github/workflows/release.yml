@@ -173,6 +173,9 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: release-macos-universal
+      - name: Install SVG renderer for the Nova Effect disk image
+        if: inputs.app-name == 'novaeffect'
+        run: cargo install resvg --locked --version 0.48.1
       - name: Apply version override
         if: inputs.version != ''
         run: cargo xtask version set "$VERSION"
