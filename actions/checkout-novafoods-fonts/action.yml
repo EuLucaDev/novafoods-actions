@@ -1,0 +1,23 @@
+name: "Check out novafoods-fonts"
+description: "Checks out the EuLucaDev/novafoods-fonts repository if a ref is specified"
+
+inputs:
+  ref:
+    description: "The git commit SHA or ref of EuLucaDev/novafoods-fonts"
+    required: false
+    default: ""
+  path:
+    description: "Directory path to check out novafoods-fonts into"
+    required: false
+    default: "novafoods-fonts"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check out novafoods-fonts
+      if: inputs.ref != ''
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: EuLucaDev/novafoods-fonts
+        ref: ${{ inputs.ref }}
+        path: ${{ inputs.path }}
