@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
         name: Resolve version
-        uses: EuLucaDev/novafoods-actions/actions/resolve-version@main
+        uses: EuLucaDev/novafoods-actions/actions/resolve-version@v2026.10.18
         with:
           input-version: ${{ inputs.version }}
           app-title: ${{ inputs.app-title }}
@@ -183,7 +183,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out novafoods-fonts
         if: inputs.novafoods-fonts-ref != ''
-        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@main
+        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@v2026.10.18
         with:
           ref: ${{ inputs.novafoods-fonts-ref }}
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -299,7 +299,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out novafoods-fonts
         if: inputs.novafoods-fonts-ref != ''
-        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@main
+        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@v2026.10.18
         with:
           ref: ${{ inputs.novafoods-fonts-ref }}
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -314,7 +314,7 @@ jobs:
         shell: bash
         run: cargo xtask version set "$VERSION"
       - name: Install WiX
-        uses: EuLucaDev/novafoods-actions/actions/install-wix@main
+        uses: EuLucaDev/novafoods-actions/actions/install-wix@v2026.10.18
         with:
           wix-version: ${{ inputs.wix-version }}
       - name: Build, sign, package
@@ -402,10 +402,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out novafoods-fonts
         if: inputs.novafoods-fonts-ref != ''
-        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@main
+        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@v2026.10.18
         with:
           ref: ${{ inputs.novafoods-fonts-ref }}
-      - uses: EuLucaDev/novafoods-actions/actions/install-linux-deps@main
+      - uses: EuLucaDev/novafoods-actions/actions/install-linux-deps@v2026.10.18
         with:
           deb-arch: ${{ matrix.deb }}
           nfpm-version: ${{ inputs.nfpm-version }}
@@ -545,7 +545,7 @@ jobs:
             exit 1
           fi
           echo "path=${tarballs[0]}" >>"$GITHUB_OUTPUT"
-      - uses: EuLucaDev/novafoods-actions/actions/arch-package@main
+      - uses: EuLucaDev/novafoods-actions/actions/arch-package@v2026.10.18
         with:
           tarball: ${{ steps.tarball.outputs.path }}
           arch: ${{ matrix.arch }}
@@ -610,7 +610,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: EuLucaDev/novafoods-actions/actions/draft-release@main
+      - uses: EuLucaDev/novafoods-actions/actions/draft-release@v2026.10.18
         with:
           version: ${{ needs.version.outputs.version }}
           app-title: ${{ inputs.app-title }}
