@@ -12,7 +12,8 @@ Full multi-platform release pipeline for Nova Foods apps:
 - **Windows** (x64, x86, ARM64 MSI installer with WiX v5, CLI, Azure Trusted Signing)
 - **Linux** (x86_64, aarch64 AppImage, deb, rpm, tar.gz via nfpm)
 - **Flatpak** (x86_64, aarch64 bundle generation)
-- **FreeBSD** (FreeBSD 15.1-STABLE VM build & packaging)
+- **FreeBSD** (FreeBSD 15.1-STABLE VM build & packaging for x86_64 and aarch64)
+- **Arch Linux** (x86_64, aarch64 `.pkg.tar.zst` built via `makepkg` from release tarball, named by bundle id; set `has-arch: false` to skip)
 - **WebAssembly** (wasm32-unknown-unknown with Trunk)
 - **Linux RISC-V 64** (cross-compilation for riscv64gc-unknown-linux-gnu, producing deb, rpm, and tar.gz via SHA256-verified nfpm)
 - **Draft Release** (computes `SHA256SUMS.txt` and publishes/updates draft GitHub Release)
@@ -64,6 +65,10 @@ jobs:
 ```
 
 List every signing secret explicitly. The signing jobs run in the caller repo's `release` environment and read the values from there, but only for the names listed here: an unlisted name is empty. On the `release` branch the macOS and Windows jobs fail when their signing secrets are empty, rather than shipping unsigned builds.
+
+`novafoods-fonts-ref` feeds the desktop builds. The web build gets novafoods-fonts too only with
+`web-novafoods-fonts: true`: each app's `build.rs` decides which fonts its web build embeds (novafoods-fonts
+`docs/integration.md`), so opt in once that list fits the app's web size budget.
 
 ### 2. `packaging-lint.yml`
 Lints all packaging configurations and metadata:
@@ -138,7 +143,22 @@ jobs:
 ```
 
 ### 4. `freebsd.yml`
-Builds and runs workspace tests inside a FreeBSD 15 VM on a Linux runner.
+Builds and runs workspace tests across a matrix (x86_64, aarch64) inside a FreeBSD 15 VM on a Linux runner.
+
+`novafoods-fonts-ref` makes the checkout available to builds, default tests and custom
+tests through `NOVAFOODS_FONTS_DIR`. Set `require-novafoods-fonts: true` to also export
+`NOVAFOODS_FONTS_REQUIRED=1` and fail before building if the checkout is missing.
+The application's build script validates its required font faces.
+
+Use a multiline `custom-test-command` for separate test groups. It runs in a
+separate `sh -eu` process whose failure stops the VM script before packaging.
+Do not rely on `errexit` to catch nonfinal commands of an `&&` list followed by
+other commands; write each required test command on its own line.
+
+`run-package-check: true` requires `packaging/freebsd/package.sh` to exist and
+succeed, then requires at least one readable `*-freebsd-<arch>.tar.gz` in
+`dist/release` for each matrix architecture. Each archive is checked separately. The app's package script
+retains responsibility for its required binaries, metadata and licence files.
 
 #### Caller Example:
 ```yaml
@@ -169,6 +189,35 @@ jobs:
       novafoods-fonts-ref: 8dcdacd5153e64560d109541a47d806f26f048c0
 ```
 
+### 5. `nix.yml`
+
+Evaluates the repository's Nix flake across supported systems without building, validating flake evaluation and `Cargo.lock` synchronization.
+
+#### Caller Example:
+
+```yaml
+name: Nix
+
+on:
+  push:
+    branches: [main]
+    paths: ["flake.nix", "flake.lock", "nix/**", "Cargo.lock", ".github/workflows/nix.yml"]
+  pull_request:
+    paths: ["flake.nix", "flake.lock", "nix/**", "Cargo.lock", ".github/workflows/nix.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nix:
+    uses: EuLucaDev/novafoods-actions/.github/workflows/nix.yml@main
+```
+
 ## Composite Actions
 
 Individual actions are also available for composing custom pipelines:
@@ -186,3 +235,44 @@ Individual actions are also available for composing custom pipelines:
 ## EuLucaDev Organization Hosting
 
 This repository is hosted at `EuLucaDev/novafoods-actions` for all EuLucaDev / Nova Foods craftapps.
+
+## App-specific packaging checks
+
+Keep app-specific packaging assertions in the caller repository and pass their
+Bash script to `packaging-lint.yml` with
+`extra-checks-script: packaging/check-app-specific.sh`. It runs after the shared
+lint action, with the checkout and lint tools available. A missing or failing
+requested script fails the job. Native Windows installer probes remain separate
+caller jobs; Linux static lint does not replace them.
+
+## Job time limits
+
+Limits live on executable jobs in these reusable workflows, since caller jobs
+using `uses` cannot set `timeout-minutes`.
+
+| Work | Limit (minutes) |
+| --- | ---: |
+| Packaging lint | 15 |
+| Release version / draft publication | 10 |
+| Release macOS, Windows, Linux, Flatpak, web, RISC-V and server builds | 90 |
+| Release FreeBSD | 300 |
+| Standalone FreeBSD build, test and optional package | 300 |
+| Windows ARM64 package / install | 90 / 30 |
+
+The new limits leave headroom over sampled Nova Foods app job timings; the existing
+FreeBSD and ARM64 limits are retained. Treat these as initial limits, review
+successful cold builds after rollout and lower them when the evidence supports it.
+These are per-job limits, not a total workflow duration or spend budget.
+
+## Testing workflow failure paths
+
+With Python 3 and PyYAML installed, run:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+The tests execute the FreeBSD run template under the host's POSIX shell with
+fixture build/test commands and real tar archives. They cover failures in each
+custom test group, default build/test failures, missing/corrupt packages and font
+environment propagation. They do not replace native FreeBSD caller runs.
