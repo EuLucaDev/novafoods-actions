@@ -41,6 +41,11 @@ on:
         type: boolean
         required: false
         default: false
+      has-flatpak:
+        description: "Whether to build the Flatpak bundles (the AppImage covers Linux)"
+        type: boolean
+        required: false
+        default: false
       has-arch:
         description: "Whether to build the Arch Linux package (.pkg.tar.zst) via makepkg"
         type: boolean
@@ -123,10 +128,109 @@ jobs:
           input-version: ${{ inputs.version }}
           app-title: ${{ inputs.app-title }}
 
+  macos-build:
+    timeout-minutes: 90
+    name: macOS ${{ matrix.arch }}
+    needs: version
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: aarch64, target: aarch64-apple-darwin }
+          - { arch: x86_64, target: x86_64-apple-darwin }
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: 1
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD_DATE: ${{ needs.version.outputs.date }}
+      BUILD_SHA: ${{ github.sha }}
+      NOVACAD_VERSION: ${{ needs.version.outputs.version }}
+      NOVACAD_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVACAD_BUILD_SHA: ${{ github.sha }}
+      NOVAFOODS_LAUNCHER_VERSION: ${{ needs.version.outputs.version }}
+      NOVAFOODS_LAUNCHER_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAFOODS_LAUNCHER_BUILD_SHA: ${{ github.sha }}
+      NOVADECK_VERSION: ${{ needs.version.outputs.version }}
+      NOVADECK_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVADECK_BUILD_SHA: ${{ github.sha }}
+      NOVADESIGN_VERSION: ${{ needs.version.outputs.version }}
+      NOVADESIGN_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVADESIGN_BUILD_SHA: ${{ github.sha }}
+      NOVAEFFECT_VERSION: ${{ needs.version.outputs.version }}
+      NOVAEFFECT_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAEFFECT_BUILD_SHA: ${{ github.sha }}
+      NOVAFILM_VERSION: ${{ needs.version.outputs.version }}
+      NOVAFILM_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAFILM_BUILD_SHA: ${{ github.sha }}
+      NOVAGRID_VERSION: ${{ needs.version.outputs.version }}
+      NOVAGRID_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAGRID_BUILD_SHA: ${{ github.sha }}
+      NOVALIGHT_VERSION: ${{ needs.version.outputs.version }}
+      NOVALIGHT_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVALIGHT_BUILD_SHA: ${{ github.sha }}
+      NOVAPDF_VERSION: ${{ needs.version.outputs.version }}
+      NOVAPDF_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAPDF_BUILD_SHA: ${{ github.sha }}
+      NOVAPHOTO_VERSION: ${{ needs.version.outputs.version }}
+      NOVAPHOTO_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAPHOTO_BUILD_SHA: ${{ github.sha }}
+      NOVASOUND_VERSION: ${{ needs.version.outputs.version }}
+      NOVASOUND_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVASOUND_BUILD_SHA: ${{ github.sha }}
+      NOVAVECTOR_VERSION: ${{ needs.version.outputs.version }}
+      NOVAVECTOR_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAVECTOR_BUILD_SHA: ${{ github.sha }}
+      NOVAWORD_VERSION: ${{ needs.version.outputs.version }}
+      NOVAWORD_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAWORD_BUILD_SHA: ${{ github.sha }}
+      NOVAFIG_VERSION: ${{ needs.version.outputs.version }}
+      NOVAFIG_BUILD_DATE: ${{ needs.version.outputs.date }}
+      NOVAFIG_BUILD_SHA: ${{ github.sha }}
+      INPUT_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out novafoods-fonts
+        if: inputs.novafoods-fonts-ref != ''
+        uses: EuLucaDev/novafoods-actions/actions/checkout-novafoods-fonts@v2026.10.18
+        with:
+          ref: ${{ inputs.novafoods-fonts-ref }}
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release-macos-${{ matrix.arch }}
+      - name: Apply version override
+        if: inputs.version != ''
+        run: cargo xtask version set "$VERSION"
+      - name: Install SVG renderer for the Nova Effect disk image
+        if: inputs.app-name == 'novaeffect'
+        run: cargo install resvg --locked --version 0.48.1
+      # Nova Foods: os dois chips compilam em paralelo; o job macos junta, assina e reconhece em cartório.
+      - name: Build (${{ matrix.arch }}, unsigned)
+        env:
+          NOVAFOODS_FONTS_DIR: ${{ github.workspace }}/novafoods-fonts
+          NOVAFOODS_FONTS_REQUIRED: "1"
+        run: packaging/macos/package.sh --arch ${{ matrix.arch }}
+      - name: Pack binaries
+        run: |
+          d=target/${{ matrix.target }}/release
+          find "$d" -maxdepth 1 -type f -perm -u+x ! -name '*.*' -print
+          tar -czf macos-bin-${{ matrix.arch }}.tgz $(find "$d" -maxdepth 1 -type f -perm -u+x ! -name '*.*')
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-bin-${{ matrix.arch }}
+          path: macos-bin-${{ matrix.arch }}.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   macos:
     timeout-minutes: 90
     name: macOS universal
-    needs: version
+    needs: [version, macos-build]
     runs-on: macos-15
     environment: release
     env:
@@ -190,9 +294,12 @@ jobs:
         with:
           toolchain: stable
           targets: aarch64-apple-darwin, x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          key: release-macos-universal
+          pattern: macos-bin-*
+          merge-multiple: true
+      - name: Unpack binaries
+        run: for f in macos-bin-*.tgz; do tar -xzf "$f"; done; ls -l target/*/release
       - name: Install SVG renderer for the Nova Effect disk image
         if: inputs.app-name == 'novaeffect'
         run: cargo install resvg --locked --version 0.48.1
@@ -212,7 +319,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NOVAFOODS_FONTS_DIR: ${{ github.workspace }}/novafoods-fonts
           NOVAFOODS_FONTS_REQUIRED: "1"
-        run: packaging/macos/package.sh --arch universal
+        run: packaging/macos/package.sh --arch universal --skip-build
       - name: Verify signatures and notarization
         if: hashFiles('packaging/macos/verify.sh') != ''
         env:
@@ -240,9 +347,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Nova Foods: Windows 10 e 11 de 64 bits (x86 e ARM não são usados).
           - { arch: x64, target: x86_64-pc-windows-msvc }
-          - { arch: x86, target: i686-pc-windows-msvc }
-          - { arch: arm64, target: aarch64-pc-windows-msvc }
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -346,8 +452,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Nova Foods: só PCs x86_64 (o ARM não é usado).
           - { arch: x86_64, runner: ubuntu-22.04, deb: amd64 }
-          - { arch: aarch64, runner: ubuntu-22.04-arm, deb: arm64 }
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -442,6 +548,7 @@ jobs:
   flatpak:
     timeout-minutes: 90
     name: Flatpak ${{ matrix.arch }}
+    if: inputs.has-flatpak
     needs: [version, linux]
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -449,7 +556,6 @@ jobs:
       matrix:
         include:
           - { arch: x86_64, runner: ubuntu-24.04 }
-          - { arch: aarch64, runner: ubuntu-24.04-arm }
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
